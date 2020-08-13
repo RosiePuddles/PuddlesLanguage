@@ -1,0 +1,22 @@
+# [v0.1.0] - 2020/08/12
+    # [Added]
+     Simple variables
+         var <var_name> :: <value>
+     Simple operators
+         +
+         -
+         /
+         *
+         //
+         ^
+     Simple logic operators
+         and
+         or
+         not
+         if
+         elif
+         else
+     Simple global variables
+         null :: 0
+         TRUE :: 1
+         FALSE :: 0
