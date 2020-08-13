@@ -1,4 +1,5 @@
-[![forthebadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com)   [![forthebadge](https://forthebadge.com/images/badges/powered-by-water.svg)](https://forthebadge.com)  
+[![forthebadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com)
+[![forthebadge](https://forthebadge.com/images/badges/powered-by-water.svg)](https://forthebadge.com)  
 
 [![GitHub version](https://badge.fury.io/gh/RosiePuddles%2FPuddlesLanguage.svg)](https://badge.fury.io/gh/RosiePuddles%2FPuddlesLanguage)  
 # PuddlesLanguage!  
@@ -8,7 +9,7 @@ I, for some still unknown reason to me, decided to write my own coding language 
 # Contents  
 - [Documentation](#Documentation)  
    - [Variables](#Variables) 
-   - [sfloat and float rules](#sfloat-and-float-rules)
+   - [sfloat and dfloat rules](#sfloat-and-dfloat-rules)
 # Documentation  
 [(Back to top)](#Contents)  
 ### Variables  
@@ -80,3 +81,5 @@ A float variable with a set number of significant figures. The number of signifi
 The code assumes that, for any sfloat or dfloat, it can be written as the sfloat value &pm;5&times;10<sup>n</sup> where n is an integer. This value is the uncertainty.
 #### Adding two or more sfloats or dfloats
 When adding the special floats, the values of the special floats are added together and returned as a float value. If the user...
+
+[![forthebadge](https://forthebadge.com/images/badges/cc-0.svg)](https://forthebadge.com)
