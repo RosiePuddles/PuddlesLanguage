@@ -1,0 +1,5 @@
+To add a new numerical operator:
+    1. Decide where it fits
+        BO[DM]AS              - Parser › term()
+        BODM[AS]              - Parser › arith_expr()
+        Comparison such as == - Parser › comp_expr()
