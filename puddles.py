@@ -215,6 +215,9 @@ class Lexer:
                 self.advance()
             elif self.current_char == ':':
                 tokens.append(self.make_var())
+            elif self.current_char == '%':
+                tokens.append(Token(TT_REM, pos_start=self.pos))
+                self.advance()
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos))
                 self.advance()
@@ -238,7 +241,6 @@ class Lexer:
                 char = self.current_char
                 self.advance()
                 return [], IllegalCharError(pos_start, self.pos, "'" + char + "'")
-
 
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         return tokens, None
@@ -578,7 +580,7 @@ class Parser:
         return self.power()
 
     def term(self):
-        return self.bin_op(self.factor, (TT_MUL, TT_DIV, TT_FLOORDIV))
+        return self.bin_op(self.factor, (TT_MUL, TT_DIV, TT_FLOORDIV, TT_REM))
 
     def arith_expr(self):
         return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
@@ -740,6 +742,17 @@ class Number:
 
             return Number(self.value // other.value).set_context(self.context), None
 
+    def remed_by(self, other):
+        if isinstance(other, Number):
+            if other.value == 0:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Division by zero',
+                    self.context
+                )
+
+            return Number(self.value % other.value).set_context(self.context), None
+
     def powed_by(self, other):
         if isinstance(other, Number):
             return Number(self.value ** other.value).set_context(self.context), None
@@ -887,6 +900,8 @@ class Interpreter:
             result, error = left.dived_by(right)
         elif node.op_tok.type == TT_FLOORDIV:
             result, error = left.floor_dived_by(right)
+        elif node.op_tok.type == TT_REM:
+            result, error = left.remed_by(right)
         elif node.op_tok.type == TT_POW:
             result, error = left.powed_by(right)
         elif node.op_tok.type == TT_EE:
@@ -963,7 +978,7 @@ def log_point(message=''):
         kill(os.getpid())
     if outputLog:
         caller = getframeinfo(stack()[1][0])
-        out = f'{{{caller.filename}}}Log : {caller.lineno}'
+        out = f'{{{caller.filename}}} Log : {caller.lineno}'
         if message != '': out += f' - {message}'
         print(out)
     logNumber += 1
