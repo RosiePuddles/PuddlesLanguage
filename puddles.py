@@ -21,6 +21,7 @@ LETTERS_DIGITS = LETTERS + DIGITS
 outputLog = True
 logNumber = 1
 
+
 #######################################
 # ERRORS
 #######################################
@@ -141,7 +142,7 @@ KEYWORDS = [
     'or',
     'not',
     'if',
-    ':',
+    'then',
     'elif',
     'else'
 ]
@@ -189,7 +190,6 @@ class Lexer:
         self.current_char = self.text[self.pos.idx]
 
     def make_tokens(self):
-        log_point('TOKEN TIME!!!!!')
         tokens = []
 
         while self.current_char != None:
@@ -198,7 +198,6 @@ class Lexer:
             elif self.current_char in DIGITS:
                 tokens.append(self.make_number())
             elif self.current_char in LETTERS:
-                log_point('Letters...')
                 tokens.append(self.make_identifier())
             elif self.current_char == '+':
                 tokens.append(Token(TT_PLUS, pos_start=self.pos))
@@ -215,7 +214,6 @@ class Lexer:
                 tokens.append(Token(TT_POW, pos_start=self.pos))
                 self.advance()
             elif self.current_char == ':':
-                log_point('Oh!! A :!!')
                 tokens.append(self.make_var())
             elif self.current_char == '(':
                 tokens.append(Token(TT_LPAREN, pos_start=self.pos))
@@ -240,6 +238,7 @@ class Lexer:
                 char = self.current_char
                 self.advance()
                 return [], IllegalCharError(pos_start, self.pos, "'" + char + "'")
+
 
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         return tokens, None
@@ -266,21 +265,14 @@ class Lexer:
         pos_start = self.pos.copy()
 
         if self.current_char != None and self.current_char == ':':
-            id_str += ':'
+            id_str += 'then'
             self.advance()
         else:
             while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
-
                 id_str += self.current_char
-                log_point('\x1b[0;30;41m' + f'{id_str}' + '\x1b[0m' + '...')
                 self.advance()
 
-        log_point('No more! ' + '\x1b[0;30;41m' + f'{id_str}' + '\x1b[0m')
-
-        log_point(f'{id_str in KEYWORDS}')
-
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
-        log_point(f'tok_type : {tok_type}')
         return Token(tok_type, id_str, pos_start, self.pos)
 
     def make_var(self):
@@ -289,11 +281,10 @@ class Lexer:
 
         if self.current_char == ':':
             self.advance()
-            return Token(TT_NE, pos_start=pos_start, pos_end=self.pos), None
+            return Token(TT_EQ, pos_start=pos_start, pos_end=self.pos)
         else:
             self.unadvance()
-            self.make_identifier()
-
+            return self.make_identifier()
 
     def make_div(self):
         tok_type = TT_DIV
@@ -489,7 +480,7 @@ class Parser:
         condition = res.register(self.expr())
         if res.error: return res
 
-        if not self.current_tok.matches(TT_KEYWORD, ':'):
+        if not self.current_tok.matches(TT_KEYWORD, 'then'):
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
                 f"Expected ':'"
@@ -509,7 +500,7 @@ class Parser:
             condition = res.register(self.expr())
             if res.error: return res
 
-            if not self.current_tok.matches(TT_KEYWORD, ':'):
+            if not self.current_tok.matches(TT_KEYWORD, 'then'):
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
                     f"Expected ':'"
@@ -522,7 +513,7 @@ class Parser:
             if res.error: return res
             cases.append((condition, expr))
 
-        if self.current_tok.matches(TT_KEYWORD, 'ELSE'):
+        if self.current_tok.matches(TT_KEYWORD, 'else'):
             res.register_advancement()
             self.advance()
 
@@ -616,7 +607,6 @@ class Parser:
 
     def expr(self):
         res = ParseResult()
-        log_point()
 
         if self.current_tok.matches(TT_KEYWORD, 'var'):
             res.register_advancement()
@@ -896,7 +886,6 @@ class Interpreter:
         elif node.op_tok.type == TT_DIV:
             result, error = left.dived_by(right)
         elif node.op_tok.type == TT_FLOORDIV:
-            log_point('TT_FLOORDIV')
             result, error = left.floor_dived_by(right)
         elif node.op_tok.type == TT_POW:
             result, error = left.powed_by(right)
@@ -963,11 +952,15 @@ class Interpreter:
 # DEBUG
 #######################################
 
+def kill(pid):
+    os.kill(pid, signal.SIGKILL)
+
+
 def log_point(message=''):
     global outputLog
     global logNumber
     if logNumber > 100:
-        os.kill(os.getpid(), signal.SIGKILL)
+        kill(os.getpid())
     if outputLog:
         caller = getframeinfo(stack()[1][0])
         out = f'{{{caller.filename}}}Log : {caller.lineno}'
@@ -991,8 +984,6 @@ def run(fn, text):
     lexer = Lexer(fn, text)
     tokens, error = lexer.make_tokens()
     if error: return None, error
-
-    log_point(tokens)
 
     # Generate AST
     parser = Parser(tokens)
