@@ -14,14 +14,13 @@ I, for some still unknown reason to me, decided to write my own coding language 
 > Currently there is only a 'var' variable for all types of variables. Others are being added
 
 #### int
+An integer variable. If the user attempts to assign a <span style="color:blue"><code>float</code></span> to an <code>int</code> variable, it will return an error, but assign the rounded <code>float</code> to the <code>int</code> variable
 <details>
-  <summary>Click to expand!</summary>
+  <summary>Example</summary>
   
-  ## Heading
-  1. A numbered
-  2. list
-     * With some
-     * Sub bullets
+  ```
+    int example_variable :: 5
+  ```
 </details>
 
 #### float
