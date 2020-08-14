@@ -544,6 +544,15 @@ class Parser:
             res.register_advancement()
             self.advance()
 
+            if not self.current_tok.matches(TT_KEYWORD, 'then'):
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Expected ':'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
             else_case = res.register(self.expr())
             if res.error: return res
 
