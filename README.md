@@ -6,9 +6,7 @@
 # PuddlesLanguage!  
 
 ## [Docs](https://github.com/RosiePuddles/PuddlesLanguage/wiki)
-
-I, for some still unknown reason to me, decided to write my own coding language over the end of lockdown and this is what came out of it. It's still being worked on  
-> **Please note!!** It doesn't work very well but, I'm still working on it to improve it  
+  
 # Contents  
 - [About](#about)
   - [Built with](#built-with)
