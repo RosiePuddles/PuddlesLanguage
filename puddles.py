@@ -55,6 +55,11 @@ class InvalidSyntaxError(Error):
         super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
 
 
+class UndefinedVarError(Error):
+    def __init__(self, pos_start, pos_end, details=''):
+        super().__init__(pos_start, pos_end, 'Undefined variable', details)
+
+
 class RTError(Error):
     def __init__(self, pos_start, pos_end, details, context):
         super().__init__(pos_start, pos_end, 'Runtime Error', details)
@@ -473,7 +478,7 @@ class Parser:
         self.tok_idx = -1
         self.advance()
 
-    def advance(self, ):
+    def advance(self):
         self.tok_idx += 1
         if self.tok_idx < len(self.tokens):
             self.current_tok = self.tokens[self.tok_idx]
@@ -489,6 +494,26 @@ class Parser:
         return res
 
     ###################################
+
+    def var_reAssign(self, res):
+        var_name = self.current_tok
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type in (TT_PLUS, TT_MINUS, TT_MUL, TT_DIV, TT_FLOORDIV, TT_REM, TT_POW):
+            pass
+
+        if self.current_tok.type != TT_EQ:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                "Expected '::'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+        expr = res.register(self.expr())
+        if res.error: return res
+        return res.success(VarAssignNode(var_name, expr))
 
     def if_expr(self):
         res = ParseResult()
@@ -752,6 +777,14 @@ class Parser:
     def expr(self):
         res = ParseResult()
 
+        # if not self.pass_identifier_check:
+        #     if self.current_tok.type == TT_IDENTIFIER:
+        #         if global_symbol_table.check(value):
+        #             self.pass_identifier_check = True
+        #             return self.var_reAssign(res)
+        #         elif self.tokens[self.tok_idx].typy == TT_EOF:
+        #             return res.success(UnaryOpNode(TT_PLUS, ))
+
         if self.current_tok.matches(TT_KEYWORD, 'var'):
             res.register_advancement()
             self.advance()
@@ -761,22 +794,16 @@ class Parser:
                     self.current_tok.pos_start, self.current_tok.pos_end,
                     "Expected variable identifier"
                 ))
+            return self.var_reAssign(res)
 
-            var_name = self.current_tok
-            res.register_advancement()
-            self.advance()
-
-            if self.current_tok.type != TT_EQ:
-                return res.failure(InvalidSyntaxError(
+        if self.current_tok.type == TT_IDENTIFIER and self.tokens[self.tok_idx + 1].type != TT_EOF and self.tokens[self.tok_idx + 1].type == TT_EQ:
+            if global_symbol_table.check(self.current_tok.value):
+                return self.var_reAssign(res)
+            else:
+                return res.failure(UndefinedVarError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected '::'"
+                    f"Undefined variable {self.current_tok.value}"
                 ))
-
-            res.register_advancement()
-            self.advance()
-            expr = res.register(self.expr())
-            if res.error: return res
-            return res.success(VarAssignNode(var_name, expr))
 
         node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
 
@@ -980,6 +1007,12 @@ class SymbolTable:
     def remove(self, name):
         del self.symbols[name]
 
+    def check(self, name):
+        if name:
+            return name in self.symbols
+        else:
+            return None
+
 
 #######################################
 # INTERPRETER
@@ -1116,15 +1149,19 @@ class Interpreter:
         if node.step_value_node:
             step_value = res.register(self.visit(node.step_value_node, context))
             if res.error: return res
-        else:
+
+
+        elif start_value.value < end_value.value:
             step_value = Number(1)
+        else:
+            step_value = Number(-1)
 
         i = start_value.value
 
         if step_value.value >= 0:
-            condition = lambda: i < end_value.value
+            condition = lambda: i <= end_value.value
         else:
-            condition = lambda: i > end_value.value
+            condition = lambda: i >= end_value.value
 
         while condition():
             context.symbol_table.set(node.var_name_tok.value, Number(i))
@@ -1187,11 +1224,17 @@ def run(fn, text):
     tokens, error = lexer.make_tokens()
     if error: return None, error
 
+    log_point(f'Tokens : {tokens}')
+
     # Generate AST
     parser = Parser(tokens)
 
+    log_point(f'Parser : {parser}')
+
     ast = parser.parse()
     if ast.error: return None, ast.error
+
+    log_point(f'ast : {ast}')
 
     # Run program
     interpreter = Interpreter()
