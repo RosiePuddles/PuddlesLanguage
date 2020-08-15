@@ -21,7 +21,12 @@ I, for some still unknown reason to me, decided to write my own coding language 
 
 # About
 
+Over lockdown, I decided to try make my own coding language after not liking C. I apolagise to anyone who likes C. But this is the mess of a language I came up with in the end.
+
 ## Built With
+
+- [Python](https://www.python.org)
+- [PyCharm](https://www.jetbrains.com/pycharm/)
 
 # Getting Started
 
@@ -34,6 +39,8 @@ I, for some still unknown reason to me, decided to write my own coding language 
 # Licence
 
 # Acknowledgements
+
+I started with no knowledge of any of this, and I learned it all from [Code Pulse](https://www.youtube.com/channel/UCUVahoidFA7F3Asfvamrm7w) and their tutorial on [creating a coding language in Python](https://www.youtube.com/playlist?list=PLZQftyCk7_SdoVexSmwy_tBgs7P0b97yD).
 
 [![forthebadge](https://forthebadge.com/images/badges/cc-0.svg)](https://forthebadge.com)
 
