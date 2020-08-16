@@ -49,7 +49,6 @@ class sfloat(Number):
 
 
 val_1 = sfloat(1.23, 2)
-val_2 = sfloat(1.0011276, 4)
 val_2 = float(0.5223)
 
 print(val_2.added_to(val_2))
