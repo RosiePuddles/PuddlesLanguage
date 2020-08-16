@@ -1416,7 +1416,33 @@ class BuiltInFunction(BaseFunction):
     #######################################
 
     def execute_print(self, exec_ctx):
-        pass
+        print(str(exec_ctx.symbol_table.get('value')))
+        return RTResult().success(Number.null)
+
+    execute_print.arg_names = ['value']
+
+    def execute_print_ret(self, exec_ctx):
+        return RTResult().success(String(print(str(exec_ctx.symbol_table.get('value')))))
+
+    execute_print.arg_names = ['value']
+
+    def execute_input(self, exec_ctx):
+        text = input()
+        return RTResult().success(String(text))
+
+    execute_input.arg_names = []
+
+    def execute_clear(self, exec_ctx):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        return RTResult().success(Number.null)
+
+    execute_clear.arg_names = []
+
+
+BuiltInFunction.print = BuiltInFunction('print')
+BuiltInFunction.print_ret = BuiltInFunction('print_ret')
+BuiltInFunction.input = BuiltInFunction('input')
+BuiltInFunction.clear = BuiltInFunction('clear')
 
 
 #######################################
@@ -1496,7 +1522,7 @@ class Interpreter:
                 context
             ))
 
-        value = value.copy().set_pos(node.pos_start, node.pos_end)
+        value = value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(value)
 
     def visit_VarAssignNode(self, node, context):
@@ -1663,6 +1689,7 @@ class Interpreter:
 
         return_value = res.register(value_to_call.execute(args))
         if res.error: return res
+        return_value = return_value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(return_value)
 
 
@@ -1695,6 +1722,10 @@ global_symbol_table = SymbolTable()
 global_symbol_table.set("null", Number.null)
 global_symbol_table.set("TRUE", Number.true)
 global_symbol_table.set("FALSE", Number.false)
+global_symbol_table.set("print", BuiltInFunction.print)
+global_symbol_table.set("printRet", BuiltInFunction.print_ret)
+global_symbol_table.set("input", BuiltInFunction.input)
+global_symbol_table.set("clear", BuiltInFunction.clear)
 
 
 def run(fn, text):
