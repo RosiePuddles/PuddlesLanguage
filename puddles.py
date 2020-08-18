@@ -1,6 +1,7 @@
 #######################################
 # IMPORTS
 #######################################
+from math import floor, log10, ceil
 
 from strings_with_arrows import *
 
@@ -121,6 +122,9 @@ class Position:
 
 TT_INT = 'INT'
 TT_FLOAT = 'FLOAT'
+TT_SFLOAT = 'SFLOAT'
+TT_DFLOAT = 'DFLOAT'
+TT_BOOL = 'BOOL'
 TT_STRING = 'STRING'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_KEYWORD = 'KEYWORD'
@@ -144,7 +148,11 @@ TT_SEMICOLON = 'SEMICOLON'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'var',
+    'int',
+    'float',
+    'sfloat',
+    'dfloat',
+    'bool',
     'and',
     'or',
     'not',
@@ -204,7 +212,7 @@ class Lexer:
     def make_tokens(self):
         tokens = []
 
-        while self.current_char != None:
+        while self.current_char is not None:
             if self.current_char in ' \t':
                 self.advance()
             elif self.current_char in DIGITS:
@@ -279,6 +287,38 @@ class Lexer:
         else:
             return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
 
+        # extra_figs = 1
+        #
+        # method_name = f'assign_{type_}'
+        # method = getattr(self, method_name, self.no_assign_method)
+        # return method(num_str, pos_start, self.pos, type_) if not extra_figs else method(num_str, pos_start, self.pos, type_, extra_figs)
+
+    def no_assign_method(self, no, no2, type_):
+        raise Exception(f'No assign_{type_}')
+
+    def assign_int(self, num_str, pos_start, pos_end, type_):
+        return Token(TT_INT, int(num_str), pos_start, pos_end)
+
+    def ensure_float(self, value):
+        if value.count('.') <= 1:
+            value = float(value)
+        else:
+            value = value.split('.')
+            value.insert(1, '.')
+            value = float(''.join(value))
+
+        return value
+
+    def assign_float(self, num_str, pos_start, pos_end, type_):
+        return Token(TT_FLOAT, self.ensure_float(num_str), pos_start, pos_end)
+
+    def assign_sfloat(self, num_str, pos_start, pos_end, type_, sig_figs=None):
+        value = self.ensure_float(num_str)
+        value = round(value, sig_figs - int(floor(log10(abs(value)))) - 1) if sig_figs is not None else value
+        sig_figs = sig_figs if sig_figs else len(str(value).replace('.', ''))
+        error = 5 * (10 ** (floor(log10(value)) - sig_figs))
+        return Token(TT_SFLOAT, [value, sig_figs, error], pos_start, pos_end)
+
     def make_string(self):
         string = ''
         pos_start = self.pos.copy()
@@ -290,7 +330,7 @@ class Lexer:
             't': '\t'
         }
 
-        while self.current_char != None and (self.current_char != '"' or escape_character):
+        while self.current_char is not None and (self.current_char != '"' or escape_character):
             if escape_character:
                 string += escape_characters.get(self.current_char, self.current_char)
                 escape_character = False
@@ -308,11 +348,11 @@ class Lexer:
         id_str = ''
         pos_start = self.pos.copy()
 
-        if self.current_char != None and self.current_char == ':':
+        if self.current_char is not None and self.current_char == ':':
             id_str += 'then'
             self.advance()
         else:
-            while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
+            while self.current_char is not None and self.current_char in LETTERS_DIGITS + '_':
                 id_str += self.current_char
                 self.advance()
 
@@ -427,6 +467,26 @@ class VarAssignNode:
 
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.value_node.pos_end
+
+
+class floatAssignNode(VarAssignNode):
+    def __init__(self, var_name_tok, value_node):
+        super().__init__(var_name_tok, value_node)
+        self.pos_end = self.value_node.pos_end
+
+    def __repr__(self):
+        return f'{self.var_name_tok} :: {self.value_node}, float'
+
+
+class sfloatAssignNode(VarAssignNode):
+    def __init__(self, var_name_tok, value_node, sig_figs):
+        super().__init__(var_name_tok, value_node)
+        self.pos_end = self.value_node.pos_end
+        self.sig_figs = sig_figs if sig_figs else len(str(self.value_node).replace('.', ''))
+        # self.error = 5 * (10 ** (floor(log10(self.value_node)) - self.sig_figs))
+
+    def __repr__(self):
+        return f'{self.var_name_tok} :: {self.value_node} ({self.sig_figs} s.f.), sfloat'
 
 
 class BinOpNode:
@@ -568,8 +628,9 @@ class Parser:
 
     ###################################
 
-    def var_reAssign(self, res):
+    def var_reAssign(self, res, type_):
         var_name = self.current_tok
+        var_type = type_
         res.register_advancement()
         self.advance()
 
@@ -586,7 +647,26 @@ class Parser:
         self.advance()
         expr = res.register(self.expr())
         if res.error: return res
-        return res.success(VarAssignNode(var_name, expr))
+
+        if var_type in ('sfloat', 'dfloat'):
+            if self.current_tok.type != TT_SEMICOLON:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    "Expected ';'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+            expr2 = res.register(self.expr())
+            if res.error: return res
+
+        if var_type == 'float':
+            out = floatAssignNode(var_name, expr)
+        elif var_type == 'sfloat':
+            out = sfloatAssignNode(var_name, expr, expr2)
+
+        log_point(out)
+        return res.success(out)
 
     def if_expr(self):
         res = ParseResult()
@@ -899,20 +979,23 @@ class Parser:
     def expr(self):
         res = ParseResult()
 
-        if self.current_tok.matches(TT_KEYWORD, 'var'):
-            res.register_advancement()
-            self.advance()
+        if self.current_tok.type is TT_KEYWORD:
+            if self.current_tok.value in ('int', 'float', 'sfloat', 'dfloat', 'string'):
+                type_ = self.current_tok.value
+                log_point(f'{type_}')
+                res.register_advancement()
+                self.advance()
 
-            if self.current_tok.type != TT_IDENTIFIER:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected variable identifier"
-                ))
-            return self.var_reAssign(res)
+                if self.current_tok.type != TT_IDENTIFIER:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        "Expected variable identifier"
+                    ))
+                return self.var_reAssign(res, type_)
 
         if self.current_tok.type == TT_IDENTIFIER and self.tokens[self.tok_idx + 1].type != TT_EOF and self.tokens[self.tok_idx + 1].type == TT_EQ:
             if global_symbol_table.check(self.current_tok.value):
-                return self.var_reAssign(res)
+                return self.var_reAssign(res, 'sfloat')
             else:
                 return res.failure(UndefinedVarError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
@@ -1141,8 +1224,9 @@ class Value:
 
 
 class Number(Value):
-    def __init__(self, value):
+    def __init__(self, value, type_=None):
         self.value = value
+        self.type = type_
         self.set_pos()
         self.set_context()
 
@@ -1282,6 +1366,64 @@ class Number(Value):
         return str(self.value)
 
 
+class Float(Number):
+    def __init__(self, value):
+        super().__init__(int(value), 'float')
+        self.set_pos()
+        self.set_context()
+
+    def added_to(self, other):
+        if isinstance(other, Number):
+            error = other.error if other.type == 'sfloat' else None
+            value = self.value + other.value
+
+            sig_figs = ceil(log10(value)) - ceil(log10(error)) if error else None
+
+            return sFloat(value, sig_figs) if sig_figs else float(value)
+
+    def __repr__(self):
+        return f'{self.value}'
+
+
+class sFloat(Number):
+    def __init__(self, value, sig_figs=None):
+        super().__init__(float(value), 'sfloat')
+        self.value = round(value, sig_figs - int(floor(log10(abs(value)))) - 1) if sig_figs is not None else value
+        self.sig_figs = sig_figs if sig_figs else len(str(self.value).replace('.', ''))
+        self.error = 5 * (10 ** (floor(log10(self.value)) - self.sig_figs))
+        self.set_pos()
+        self.set_context()
+
+    def added_to(self, other):
+        if isinstance(other, Number):
+            if other.type == 'sfloat':
+                error = (self.error + other.error) / 5
+                error = 5 * (10 ** (floor(log10(error))))
+            else:
+                error = self.error
+            value = self.value + other.value
+
+            sig_figs = ceil(log10(value)) - ceil(log10(error))
+
+            return sFloat(value, sig_figs)
+
+    def __repr__(self):
+        return f'{self.value} ('
+
+
+class Bool(Number):
+    def __init__(self, value):
+        super().__init__(value, 'bool')
+
+    def __repr__(self):
+        return f'{"TRUE" if self.value == 1 else "FALSE"}'
+
+
+Number.null = Bool(0)
+Number.true = Bool(1)
+Number.false = Bool(0)
+
+
 class String(Value):
     def __init__(self, value):
         super().__init__()
@@ -1306,40 +1448,65 @@ class String(Value):
         return str(self.value)
 
 
-class Function(Value):
-    def __init__(self, name, body_node, arg_names):
+class BaseFunction(Value):
+    def __init__(self, name):
         super().__init__()
         self.name = name or '<anonymous>'
+
+    def generate_new_context(self):
+        new_context = Context(self.name, self.context, self.pos_start)
+        new_context.symbol_table = SymbolTable(new_context.parent.symbol_table)
+        return new_context
+
+    def check_args(self, arg_names, args):
+        res = RTResult()
+
+        if len(args) > len(arg_names):
+            return res.failure(RTError(
+                self.pos_start, self.pos_end,
+                f"{len(args) - len(arg_names)} too many arguments passed into '{self.name}'",
+                self.context
+            ))
+
+        if len(args) < len(arg_names):
+            return res.failure(RTError(
+                self.pos_start, self.pos_end,
+                f"{len(arg_names) - len(args)} too few arguments passed into '{self.name}'",
+                self.context
+            ))
+
+        return res.success(None)
+
+    def populate_args(self, arg_names, args, exec_ctx):
+        for i in range(len(args)):
+            arg_name = arg_names[i]
+            arg_value = args[i]
+            arg_value.set_context(exec_ctx)
+            exec_ctx.symbol_table.set(arg_name, arg_value)
+
+    def check_and_populate_args(self, arg_names, args, exec_ctx):
+        res = RTResult()
+        res.register(self.check_args(arg_names, args))
+        if res.error: return res
+        self.populate_args(arg_names, args, exec_ctx)
+        return res.success(None)
+
+
+class Function(BaseFunction):
+    def __init__(self, name, body_node, arg_names):
+        super().__init__(name)
         self.body_node = body_node
         self.arg_names = arg_names
 
     def execute(self, args):
         res = RTResult()
         interpreter = Interpreter()
-        new_context = Context(self.name, self.context, self.pos_start)
-        new_context.symbol_table = SymbolTable(new_context.parent.symbol_table)
+        exec_ctx = self.generate_new_context()
 
-        if len(args) > len(self.arg_names):
-            return res.failure(RTError(
-                self.pos_start, self.pos_end,
-                f"{len(args) - len(self.arg_names)} too many arguments passed into '{self.name}'",
-                self.context
-            ))
+        res.register(self.check_and_populate_args(self.arg_names, args, exec_ctx))
+        if res.error: return res
 
-        if len(args) < len(self.arg_names):
-            return res.failure(RTError(
-                self.pos_start, self.pos_end,
-                f"{len(self.arg_names) - len(args)} too few arguments passed into '{self.name}'",
-                self.context
-            ))
-
-        for i in range(len(args)):
-            arg_name = self.arg_names[i]
-            arg_value = args[i]
-            arg_value.set_context(new_context)
-            new_context.symbol_table.set(arg_name, arg_value)
-
-        value = res.register(interpreter.visit(self.body_node, new_context))
+        value = res.register(interpreter.visit(self.body_node, exec_ctx))
         if res.error: return res
         return res.success(value)
 
@@ -1351,6 +1518,68 @@ class Function(Value):
 
     def __repr__(self):
         return f"<function {self.name}>"
+
+
+class BuiltInFunction(BaseFunction):
+    def __init__(self, name):
+        super().__init__(name)
+
+    def execute(self, args):
+        res = RTResult()
+        exec_ctx = self.generate_new_context()
+
+        method_name = f'execute_{self.name}'
+        method = getattr(self, method_name, self.no_visit_method)
+
+        res.register(self.check_and_populate_args(method.arg_names, args, exec_ctx))
+        if res.error: return res
+
+        return_value = res.register(method(exec_ctx))
+        if res.error: return res
+        return res.success(return_value)
+
+    def no_visit_method(self, node, context):
+        raise Exception(f'No execute_{self.name} method defined')
+
+    def copy(self):
+        copy = BuiltInFunction(self.name)
+        copy.set_context(self.context)
+        copy.set_pos(self.pos_start, self.pos_end)
+        return copy
+
+    def __repr__(self):
+        return f'<built-in function {self.name}>'
+
+    #######################################
+
+    def execute_print(self, exec_ctx):
+        print(str(exec_ctx.symbol_table.get('value')))
+        return RTResult().success(Number.null)
+
+    execute_print.arg_names = ['value']
+
+    def execute_print_ret(self, exec_ctx):
+        return RTResult().success(String(print(str(exec_ctx.symbol_table.get('value')))))
+
+    execute_print.arg_names = ['value']
+
+    def execute_input(self, exec_ctx):
+        text = input()
+        return RTResult().success(String(text))
+
+    execute_input.arg_names = []
+
+    def execute_clear(self, exec_ctx):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        return RTResult().success(Number.null)
+
+    execute_clear.arg_names = []
+
+
+BuiltInFunction.print = BuiltInFunction('print')
+BuiltInFunction.print_ret = BuiltInFunction('print_ret')
+BuiltInFunction.input = BuiltInFunction('input')
+BuiltInFunction.clear = BuiltInFunction('clear')
 
 
 #######################################
@@ -1392,6 +1621,9 @@ class SymbolTable:
         else:
             return None
 
+    def __repr__(self):
+        return f'{self.symbols}'
+
 
 #######################################
 # INTERPRETER
@@ -1430,15 +1662,25 @@ class Interpreter:
                 context
             ))
 
-        value = value.copy().set_pos(node.pos_start, node.pos_end)
+        value = value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(value)
 
     def visit_VarAssignNode(self, node, context):
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
+        log_point(node)
         if res.error: return res
 
+        context.symbol_table.set(var_name, value)
+        return res.success(value)
+
+    def visit_sfloatAssignNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        value = res.register(self.visit(node.value_node, context))
+        sig_figs = res.register(self.visit(node.sig_figs, context))
+        if res.error: return res
         context.symbol_table.set(var_name, value)
         return res.success(value)
 
@@ -1597,6 +1839,7 @@ class Interpreter:
 
         return_value = res.register(value_to_call.execute(args))
         if res.error: return res
+        return_value = return_value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(return_value)
 
 
@@ -1608,7 +1851,7 @@ def kill(pid):
     os.kill(pid, signal.SIGKILL)
 
 
-def log_point(message=''):
+def log_point(message=None):
     global outputLog
     global logNumber
     if logNumber > 100:
@@ -1616,7 +1859,7 @@ def log_point(message=''):
     if outputLog:
         caller = getframeinfo(stack()[1][0])
         out = f'{{{caller.filename}}} Log : {caller.lineno}'
-        if message != '': out += f' - {message}'
+        if message is not None: out += f' - {message}'
         print(out)
     logNumber += 1
 
@@ -1626,9 +1869,13 @@ def log_point(message=''):
 #######################################
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set("null", Number(0))
-global_symbol_table.set("TRUE", Number(1))
-global_symbol_table.set("FALSE", Number(0))
+global_symbol_table.set("null", Number.null)
+global_symbol_table.set("TRUE", Number.true)
+global_symbol_table.set("FALSE", Number.false)
+global_symbol_table.set("print", BuiltInFunction.print)
+global_symbol_table.set("printRet", BuiltInFunction.print_ret)
+global_symbol_table.set("input", BuiltInFunction.input)
+global_symbol_table.set("clear", BuiltInFunction.clear)
 
 
 def run(fn, text):
@@ -1654,5 +1901,7 @@ def run(fn, text):
     context = Context('<Lake>')
     context.symbol_table = global_symbol_table
     result = interpreter.visit(ast.node, context)
+
+    log_point(global_symbol_table)
 
     return result.value, result.error
