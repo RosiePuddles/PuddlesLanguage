@@ -19,7 +19,7 @@ DIGITS = '0123456789'
 LETTERS = string.ascii_letters
 LETTERS_DIGITS = LETTERS + DIGITS
 
-outputLog = True
+outputLog = False
 logNumber = 1
 
 
@@ -665,7 +665,6 @@ class Parser:
         elif var_type == 'sfloat':
             out = sfloatAssignNode(var_name, expr, expr2)
 
-        log_point(out)
         return res.success(out)
 
     def if_expr(self):
@@ -982,7 +981,6 @@ class Parser:
         if self.current_tok.type is TT_KEYWORD:
             if self.current_tok.value in ('int', 'float', 'sfloat', 'dfloat', 'string'):
                 type_ = self.current_tok.value
-                log_point(f'{type_}')
                 res.register_advancement()
                 self.advance()
 
@@ -1598,6 +1596,19 @@ class Context:
 # SYMBOL TABLE
 #######################################
 
+class Item:
+    def __init__(self, value, type_=None, extra=None):
+        self.value = value
+        self.type = type_
+        self.extra = extra
+
+    def __repr__(self):
+        out = f'{self.value}'
+        if self.type is not None: out += f', {self.type}'
+        if self.extra is not None: out += f', {self.extra}'
+        return out
+
+
 class SymbolTable:
     def __init__(self, parent=None):
         self.symbols = {}
@@ -1605,12 +1616,12 @@ class SymbolTable:
 
     def get(self, name):
         value = self.symbols.get(name, None)
-        if value == None and self.parent:
+        if value is not None and self.parent:
             return self.parent.get(name)
         return value
 
     def set(self, name, value):
-        self.symbols[name] = value
+        self.symbols[name] = Item(value)
 
     def remove(self, name):
         del self.symbols[name]
@@ -1653,7 +1664,7 @@ class Interpreter:
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
         var_name = node.var_name_tok.value
-        value = context.symbol_table.get(var_name)
+        value = context.symbol_table.get(var_name).value.value
 
         if not value:
             return res.failure(RTError(
@@ -1669,7 +1680,6 @@ class Interpreter:
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
-        log_point(node)
         if res.error: return res
 
         context.symbol_table.set(var_name, value)
@@ -1680,9 +1690,17 @@ class Interpreter:
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
         sig_figs = res.register(self.visit(node.sig_figs, context))
+        error = 5 * (10 ** (floor(log10(value.value)) - sig_figs.value))
         if res.error: return res
-        context.symbol_table.set(var_name, value)
+        context.symbol_table.set(var_name, Item(value, 'sfloat', [sig_figs, error]))
         return res.success(value)
+
+    def visit_floatAssignNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+        value = res.register(self.visit(node.value_node, context))
+        if res.error: return res
+        context.symbol_table.set(var_name, Item(value, 'float'))
 
     def visit_BinOpNode(self, node, context):
         res = RTResult()
@@ -1902,6 +1920,6 @@ def run(fn, text):
     context.symbol_table = global_symbol_table
     result = interpreter.visit(ast.node, context)
 
-    log_point(global_symbol_table)
+    # log_point('\n' + "\n".join("{!r}: {!r},".format(k, v) for k, v in global_symbol_table.symbols.items()) + '\n')
 
     return result.value, result.error
