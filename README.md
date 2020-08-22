@@ -38,7 +38,7 @@ Over lockdown, I decided to try make my own coding language after not liking C. 
 
 # Acknowledgements
 
-I started with no knowledge of any of this, and I learned it all from [Code Pulse](https://www.youtube.com/channel/UCUVahoidFA7F3Asfvamrm7w) and their tutorial on [creating a coding language in Python](https://www.youtube.com/playlist?list=PLZQftyCk7_SdoVexSmwy_tBgs7P0b97yD).
+I started with no knowledge of any of this, and I learned it all from [Code Pulse](https://www.youtube.com/channel/UCUVahoidFA7F3Asfvamrm7w) and their tutorial on [creating a coding language in Python](https://www.youtube.com/playlist?list=PLZQftyCk7_SdoVexSmwy_tBgs7P0b97yD). Also as everyone does, I did some very one sided collaboration with [Stack Overflow](https://stackoverflow.com).
 
 [![forthebadge](https://forthebadge.com/images/badges/cc-0.svg)](https://forthebadge.com)
 
