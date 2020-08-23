@@ -19,7 +19,7 @@ DIGITS = '0123456789'
 LETTERS = string.ascii_letters
 LETTERS_DIGITS = LETTERS + DIGITS
 
-outputLog = False
+outputLog = True
 logNumber = 1
 
 
@@ -205,7 +205,7 @@ class Lexer:
         self.pos.advance(self.current_char)
         self.current_char = self.text[self.pos.idx] if self.pos.idx < len(self.text) else None
 
-    def unadvance(self):
+    def un_advance(self):
         self.pos.unadvence()
         self.current_char = self.text[self.pos.idx]
 
@@ -367,7 +367,7 @@ class Lexer:
             self.advance()
             return Token(TT_EQ, pos_start=pos_start, pos_end=self.pos)
         else:
-            self.unadvance()
+            self.un_advance()
             return self.make_identifier()
 
     def make_div(self):
@@ -479,10 +479,13 @@ class floatAssignNode(VarAssignNode):
 
 
 class sfloatAssignNode(VarAssignNode):
-    def __init__(self, var_name_tok, value_node, sig_figs):
+    def __init__(self, var_name_tok, value_node, sig_figs=None):
         super().__init__(var_name_tok, value_node)
         self.pos_end = self.value_node.pos_end
-        self.sig_figs = sig_figs if sig_figs else len(str(self.value_node).replace('.', ''))
+        if global_symbol_table.check(self.var_name_tok.value):
+            a = global_symbol_table.get(self.var_name_tok.value)
+            log_point(a.value.extra)
+        self.sig_figs = sig_figs if sig_figs else global_symbol_table.get(self.var_name_tok.value).value.extra[0]
         # self.error = 5 * (10 ** (floor(log10(self.value_node)) - self.sig_figs))
 
     def __repr__(self):
@@ -648,22 +651,35 @@ class Parser:
         expr = res.register(self.expr())
         if res.error: return res
 
-        if var_type in ('sfloat', 'dfloat'):
-            if self.current_tok.type != TT_SEMICOLON:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected ';'"
-                ))
+        expr2 = None
 
-            res.register_advancement()
-            self.advance()
-            expr2 = res.register(self.expr())
-            if res.error: return res
+        if var_type in ('sfloat', 'dfloat'):
+            log_point('special float type')
+            if not global_symbol_table.check(var_name.value):
+                if self.current_tok.type != TT_SEMICOLON:
+                    return res.failure(InvalidSyntaxError(
+                        self.current_tok.pos_start, self.current_tok.pos_end,
+                        "Expected ';'"
+                    ))
+
+                res.register_advancement()
+                self.advance()
+                expr2 = res.register(self.expr())
+                if res.error: return res
+
+            elif self.current_tok.type == TT_SEMICOLON:
+                res.register_advancement()
+                self.advance()
+                expr2 = res.register(self.expr())
+                if res.error: return res
 
         if var_type == 'float':
             out = floatAssignNode(var_name, expr)
         elif var_type == 'sfloat':
-            out = sfloatAssignNode(var_name, expr, expr2)
+            if expr2:
+                out = sfloatAssignNode(var_name, expr, expr2)
+            else:
+                out = sfloatAssignNode(var_name, expr)
 
         return res.success(out)
 
@@ -1364,9 +1380,19 @@ class Number(Value):
         return str(self.value)
 
 
+class Int(Number):
+    def __init__(self, value):
+        super().__init__(int(value), 'int')
+        self.set_pos()
+        self.set_context()
+
+    def __repr__(self):
+        return f'{self.value}'
+
+
 class Float(Number):
     def __init__(self, value):
-        super().__init__(int(value), 'float')
+        super().__init__(float(value), 'float')
         self.set_pos()
         self.set_context()
 
@@ -1384,10 +1410,10 @@ class Float(Number):
 
 
 class sFloat(Number):
-    def __init__(self, value, sig_figs=None):
+    def __init__(self, value, sig_figs):
         super().__init__(float(value), 'sfloat')
-        self.value = round(value, sig_figs - int(floor(log10(abs(value)))) - 1) if sig_figs is not None else value
-        self.sig_figs = sig_figs if sig_figs else len(str(self.value).replace('.', ''))
+        self.value = float(round(value, sig_figs - int(floor(log10(abs(value)))) - 1))
+        self.sig_figs = sig_figs
         self.error = 5 * (10 ** (floor(log10(self.value)) - self.sig_figs))
         self.set_pos()
         self.set_context()
@@ -1406,7 +1432,7 @@ class sFloat(Number):
             return sFloat(value, sig_figs)
 
     def __repr__(self):
-        return f'{self.value} ('
+        return format(self.value, '.' + str(max(0, self.sig_figs - floor(log10(self.value)) - 1)) + 'f')
 
 
 class Bool(Number):
@@ -1604,8 +1630,8 @@ class Item:
 
     def __repr__(self):
         out = f'{self.value}'
-        if self.type is not None: out += f', {self.type}'
-        if self.extra is not None: out += f', {self.extra}'
+        if self.type is not None: out += f', of type <{self.type}>'
+        if self.extra is not None: out += f', with extra information <{self.extra}>'
         return out
 
 
@@ -1644,6 +1670,9 @@ class Interpreter:
     def visit(self, node, context):
         method_name = f'visit_{type(node).__name__}'
         method = getattr(self, method_name, self.no_visit_method)
+        log_point((
+            node, method_name
+        ))
         return method(node, context)
 
     def no_visit_method(self, node, context):
@@ -1689,9 +1718,13 @@ class Interpreter:
         res = RTResult()
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
-        sig_figs = res.register(self.visit(node.sig_figs, context))
+        if type(node.sig_figs) != Number:
+            sig_figs = res.register(self.visit(node.sig_figs, context))
+        else:
+            sig_figs = node.sig_figs
         error = 5 * (10 ** (floor(log10(value.value)) - sig_figs.value))
         if res.error: return res
+        value = sFloat(value.value, sig_figs.value)
         context.symbol_table.set(var_name, Item(value, 'sfloat', [sig_figs, error]))
         return res.success(value)
 
